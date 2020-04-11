@@ -19,7 +19,7 @@ from sim import coef
 from tqdm import tqdm
 import ray
 
-num_cpus = 4
+num_cpus = 2
 ray.init(num_cpus=num_cpus)
 
 ################################################################################
@@ -135,6 +135,7 @@ def par_func(samples, points, DEBUG):
 
     X = np.zeros((samples, points//2, 2, 1), dtype=float)
     Y = np.zeros((samples, 2), dtype=float)
+    N = np.zeros((samples, 4), dtype=float)
 
     for sample in range(samples):
 
@@ -182,17 +183,22 @@ def par_func(samples, points, DEBUG):
         Y[sample, 0] = cl
         Y[sample, 1] = cd
 
-    return X, Y
+        N[sample, :] = [m, p, t, a]
+
+    return X, Y, N
 
 object_id = [par_func.remote(samples//num_cpus, points, DEBUG) for i in range(num_cpus)]
 out = ray.get(object_id)
 
 X = out[0][0]
 Y = out[0][1]
+N = out[0][2]
 
 for i in range(1, num_cpus):
     X = np.concatenate((X, out[i][0]), axis=0)
     Y = np.concatenate((Y, out[i][1]), axis=0)
+    N = np.concatenate((N, out[i][2]), axis=0)
 
 np.save('X_000.npy', X)
 np.save('y_000.npy', Y)
+np.save('n_000.npy', N)
