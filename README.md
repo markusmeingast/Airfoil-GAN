@@ -1,1 +1,0 @@
-# Airfoil-GAN
