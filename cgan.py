@@ -10,6 +10,24 @@ combined and finally tested for validity.
 Losses are based on binary crossentropy only, i.e. the validity of results.
 
 Issues were encountered using batch normalization. For now, it is ignored.
+
+
+Observations:
+ - Concatenating target parameters with image prior to Conv2D layers produces
+   unstable solution. Parameter dependency seems present, but no clean solution obtained.
+ - Concatenating target parameters with processed image data, post Conv2D, results
+   in clean shapes, but no parameter dependency obtained
+ - LeakyReLU after late concatenation produces weird results
+ - BN for all Conv2D layers produces weird results.
+ - BN on D only produces weird results
+ - SN on all Conv2D layers seems to work fine, no parameter dependency as before
+
+
+
+Guidelines:
+ - smoothing works
+ - no BN on D
+ - BN on G
 """
 
 ################################################################################
@@ -114,14 +132,13 @@ class CGAN():
         net = Reshape((8, 2, self.DEPTH*4))(net)
 
         ##### CONV2DTRANSPOSE
-        net = Conv2DTranspose(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init)(net)
-        #net = BatchNormalization(momentum=0.8)(net)
+        net = SpectralNormalization(Conv2DTranspose(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
+        net = BatchNormalization(momentum=0.8)(net)
         net = ReLU()(net)
 
         ##### CONV2DTRANSPOSE
-        net = Conv2DTranspose(self.DEPTH, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init)(net)
-        #SpectralNormalization(
-        #net = BatchNormalization(momentum=0.8)(net)
+        net = SpectralNormalization(Conv2DTranspose(self.DEPTH, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
+        net = BatchNormalization(momentum=0.8)(net)
         net = ReLU()(net)
 
         if self.BLUR:
@@ -158,17 +175,17 @@ class CGAN():
         #net = LeakyReLU(alpha=0.2)(net)
 
         ##### CONV2D
-        net = Conv2D(self.DEPTH, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init)(net)
+        net = SpectralNormalization(Conv2D(self.DEPTH, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
         net = LeakyReLU(alpha=0.2)(net)
         net = Dropout(0.5)(net)
 
         ##### CONV2D
-        net = Conv2D(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init)(net)
+        net = SpectralNormalization(Conv2D(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
         net = LeakyReLU(alpha=0.2)(net)
         net = Dropout(0.5)(net)
 
         ##### CONV2D
-        net = Conv2D(self.DEPTH*4, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init)(net)
+        net = SpectralNormalization(Conv2D(self.DEPTH*4, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
         net = LeakyReLU(alpha=0.2)(net)
         net = Dropout(0.5)(net)
 
@@ -178,7 +195,6 @@ class CGAN():
         ##### DENSE LAYER ($$ NO ACTIVATION!)
         net = concatenate([net, y_in], axis=-1)
         net = Dense(128)(net)
-        #net = BatchNormalization(momentum=0.9)(net)
 
         ##### VALIDITY
         w_out = Dense(1, activation='sigmoid')(net)
