@@ -21,7 +21,7 @@ import tensorflow as tf
 # %% CONSTANTS
 ################################################################################
 
-EPOCHS = 2000
+EPOCHS = 200
 BATCH_SIZE = 1024
 BATCHES = 160
 POINTS = 64

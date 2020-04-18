@@ -57,6 +57,7 @@ class CGAN():
         self.optimizer = Adam(lr=self.LEARN_RATE, beta_1=0.5)
         #self.optimizer = RMSprop(lr=self.LEARN_RATE, clipnorm=1.)
         #self.optimizer = SGD(learning_rate=self.LEARN_RATE, momentum=0.1)
+        self.BLUR = True
 
     ##### GAUSSIAN BLUR FILTER (ISSUES AT END POINTS)
     def kernel_init(self, shape, dtype=float, partition_info=None):
@@ -123,14 +124,18 @@ class CGAN():
         #net = BatchNormalization(momentum=0.8)(net)
         net = ReLU()(net)
 
-        ##### GAUSSIAN BLUR / OUTPUT
-        X_out = Conv2DTranspose(1, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init, activation='tanh')(net)
-        #net = Lambda(self.edge_padding)(net)
-        #X_out = Conv2D(1, (7,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init)(net)
+        if self.BLUR:
+            ##### GAUSSIAN BLUR / OUTPUT
+            net = Conv2DTranspose(1, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init, activation='tanh')(net)
+            net = Lambda(self.edge_padding)(net)
+            X_out = Conv2D(1, (7,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init)(net)
+        else:
+            X_out = Conv2DTranspose(1, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init, activation='tanh')(net)
 
         ##### BUILD MODEL
         model = Model(inputs=[y_in, z_in], outputs=X_out)
-        #model.layers[-1].trainable = False
+        if self.BLUR:
+            model.layers[-1].trainable = False
 
         return model
 
