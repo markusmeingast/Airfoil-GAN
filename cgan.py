@@ -106,13 +106,8 @@ class CGAN():
         y_in = Input(shape=self.PAR_DIM)
         z_in = Input(shape=self.LAT_DIM)
 
-        ynet = Dense(128)(y_in)
-        ynet = ReLU()(ynet)
-        znet = Dense(128)(z_in)
-        znet = ReLU()(znet)
-
         ##### COMBINE AND DENSE
-        net = concatenate([ynet, znet], axis=-1)
+        net = concatenate([y_in, z_in], axis=-1)
         net = Dense(8*2*self.DEPTH*4)(net)
         net = ReLU()(net)
 
@@ -155,7 +150,7 @@ class CGAN():
         y_in = Input(self.PAR_DIM)
 
         ##### ADD NOISE TO IMAGE
-        net = GaussianNoise(0.02)(X_in)
+        net = GaussianNoise(0.00)(X_in)
 
         #ynet = Dense(np.prod(self.DAT_SHP))(y_in)
         #ynet = Reshape(self.DAT_SHP)(ynet)
@@ -180,17 +175,17 @@ class CGAN():
         ##### TO DENSE
         net = Flatten()(net)
 
-        ##### DENSE PARAMETER LAYER
+        ##### DENSE LAYER ($$ NO ACTIVATION!)
         net = concatenate([net, y_in], axis=-1)
-        net = Dense(256)(net)
-        net = LeakyReLU(alpha=0.2)(net)
+        net = Dense(128)(net)
+        #net = BatchNormalization(momentum=0.9)(net)
 
         ##### VALIDITY
         w_out = Dense(1, activation='sigmoid')(net)
 
         ##### MODEL
         model = Model(inputs=[X_in, y_in], outputs=w_out)
-        model.compile(loss=BinaryCrossentropy(label_smoothing=0.3), metrics=['accuracy'], optimizer=Adam(lr=10*self.LEARN_RATE, beta_1=0.5))
+        model.compile(loss=BinaryCrossentropy(label_smoothing=0.3), metrics=['accuracy'], optimizer=Adam(lr=self.LEARN_RATE, beta_1=0.5))
 
         return model
 
