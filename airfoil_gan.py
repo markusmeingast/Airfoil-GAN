@@ -1,9 +1,9 @@
 """
 Assumptions:
  - X:   curve data (range -1.0 ... 1.0)
- - y:   parameters (-1.0 ... 1.0)
+ - y:   parameters (normal (0 mean, 1 std))
  - z:   noise (normal centered around 0)
- - w:   truth (-1.0/fake - 1.0/real)
+ - w:   truth (0.0/fake - 1.0/real)
 """
 
 ################################################################################
@@ -13,15 +13,23 @@ Assumptions:
 import numpy as np
 from generator import profile_generator
 from cgan import CGAN
+#from lstmgan import LSTMGAN
 #from acgan import ACGAN
 import matplotlib.pyplot as mp
 import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.losses import BinaryCrossentropy
+from SNConv2D import SpectralNormalization
 
 ################################################################################
 # %% CONSTANTS
 ################################################################################
 
-EPOCHS = 200
+EPOCHS = 2000
+
+RESTART = False
+LAST_EPOCH = 0
+
 BATCH_SIZE = 1024
 BATCHES = 160
 POINTS = 64
@@ -30,7 +38,7 @@ LAT_DIM = 100
 PAR_DIM = 3
 DEPTH = 32
 LEARN_RATE = 0.0002
-RESTART = False
+
 
 ################################################################################
 # %% KERAS/TF SETTINGS
@@ -58,15 +66,35 @@ gan = CGAN(DAT_SHP=DAT_SHP, PAR_DIM=PAR_DIM, LAT_DIM=LAT_DIM, DEPTH=DEPTH, LEARN
 
 g_model = gan.build_generator()
 d_model = gan.build_discriminator()
-
+e_model = gan.build_encoder()
+"""
 if RESTART:
-    g_model.load_weights('02-results/g_model.h5')
-    d_model.load_weights('02-results/d_model.h5')
+    #####
+    g_model.load_weights('02-results/g_model.h5', by_name=True, skip_mismatch=True)
+    d_model.load_weights('02-results/d_model.h5', by_name=True, skip_mismatch=True)
 
+    g_model = load_model('02-results/g_model.h5',
+        custom_objects={
+            'edge_padding': gan.edge_padding,
+            'closing': gan.closing,
+            'kernel_init': gan.kernel_init,
+            'SpectralNormalization': SpectralNormalization})
+
+    d_model = load_model('02-results/d_model.h5',
+        custom_objects={
+            'SpectralNormalization': SpectralNormalization
+        })
+
+    d_model.trainable = True
+    for layer in d_model.layers:
+        layer.trainable = True
+"""
 print(g_model.summary())
 print(d_model.summary())
+print(e_model.summary())
 
 gan_model = gan.build_gan(g_model, d_model)
+ae_model = gan.build_autoencoder(e_model, g_model)
 
 ################################################################################
 # %% LOOP EPOCHS
@@ -80,7 +108,7 @@ else:
     loss = []
 
 ##### LOOP OVER EPOCHS
-for epoch in range(EPOCHS):
+for epoch in range(LAST_EPOCH, LAST_EPOCH+EPOCHS):
 
     ##### LOOP OVER BATCHES
     for batch in range(BATCHES):
@@ -91,31 +119,60 @@ for epoch in range(EPOCHS):
 
         ##### PRODUCE FAKE DATA
         w_fake = np.zeros((len(y_real),1), dtype=float)
-        y_fake = np.random.uniform(-1, 1, (BATCH_SIZE, PAR_DIM))
+        y_fake = np.random.randn(BATCH_SIZE, PAR_DIM)
         z_fake = np.random.randn(BATCH_SIZE, LAT_DIM)
         X_fake = g_model.predict([y_fake, z_fake])
 
         ##### TRAIN DISCRIMINATOR
-        d_loss_real = d_model.train_on_batch([X_real[:BATCH_SIZE//2], y_real[:BATCH_SIZE//2]], w_real[:BATCH_SIZE//2])
-        d_loss_fake = d_model.train_on_batch([X_fake[:BATCH_SIZE//2], y_fake[:BATCH_SIZE//2]], w_fake[:BATCH_SIZE//2])
+        d_loss_real = d_model.train_on_batch(
+            [X_real[:BATCH_SIZE//2], y_real[:BATCH_SIZE//2]],
+            [w_real[:BATCH_SIZE//2]]
+        )
+        d_loss_fake = d_model.train_on_batch(
+            [X_fake[:BATCH_SIZE//2], y_fake[:BATCH_SIZE//2]],
+            [w_fake[:BATCH_SIZE//2]]
+        )
         d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
         ##### TRAIN GENERATOR
-        g_loss = gan_model.train_on_batch([y_fake, z_fake], w_real)
+        g_loss = gan_model.train_on_batch(
+            [y_fake, z_fake],
+            [w_real]
+        )
+
+        ##### TRAIN AUTOENCODER
+        e_loss = ae_model.train_on_batch(X_real, X_real)
 
         acc.append([d_loss[-1], g_loss[-1]])
-        loss.append([d_loss[0], g_loss[0]])
+        loss.append([d_loss[0], g_loss[0], e_loss])
 
     ##### PRINT PROGRESS
-    print(f'Epoch: {epoch} - D loss: {d_loss[0]} - G loss: {g_loss[0]} - D(w) acc: {d_loss[-1]} - G(w) acc: {g_loss[-1]}')
+    print(f'Epoch: {epoch} - D loss: {d_loss[0]} - G loss: {g_loss[0]} - D(w) acc: {d_loss[-1]} - G(w) acc: {g_loss[-1]} - E loss:{e_loss}')
+
+    ############################################################################
+    # %% PLOT AUTOENCODER RESULTS
+    ############################################################################
+
+    nsamples = 5
+    idx = np.random.randint(low=0, high=BATCH_SIZE, size=nsamples)
+    img0 = X_real[idx, :, :, :]
+    y_pred, z_pred = e_model.predict(X_real)
+    X_pred = g_model.predict([y_pred, z_pred])
+    img1 = X_pred[idx, :, :, :]
+    for i, j in enumerate(idx):
+        mp.plot(X_real[j, :, 0, 0]+i*2.1, X_real[j, :, 1, 0]+0.5)
+        mp.plot(X_pred[j, :, 0, 0]+i*2.1, X_pred[j, :, 1, 0]-0.5)
+    mp.axis('equal')
+    mp.savefig(f'02-results/ae_{epoch:03d}.png')
+    mp.close()
 
     ############################################################################
     # %% TEST GENERATOR
     ############################################################################
 
     nsamples = 5
-    cl = np.random.uniform(-1, 1, (1))*np.ones((nsamples))
-    cd = np.random.uniform(-1, 1, (1))*np.ones((nsamples))
+    cl = np.random.randn(1)*np.ones((nsamples))
+    cd = np.random.randn(1)*np.ones((nsamples))
     y_pred = np.array([
         cl,
         cd,
@@ -127,7 +184,7 @@ for epoch in range(EPOCHS):
         mp.plot(X_pred[i,:,0,0]+i*2.1,X_pred[i,:,1,0]-0.5)
         mp.plot(X_real[i,:,0,0]+i*2.1,X_real[i,:,1,0]+0.5)
     mp.axis('equal')
-    mp.title(f'CL/CD: {cl[0]*2.3} / {(cd[0]+1.0)*0.28/2.0}')
+    mp.title(f'CL: {cl[0]*0.7+0.5}, CD: {np.exp(cd[0]*0.7-3.6)}')
     mp.savefig(f'02-results/gen_{epoch:03d}.png')
     mp.close()
 
@@ -137,6 +194,7 @@ for epoch in range(EPOCHS):
 
     g_model.save('02-results/g_model.h5')
     d_model.save('02-results/d_model.h5')
+    e_model.save('02-results/e_model.h5')
 
     ############################################################################
     # %% PLOT LOSS CURVES
@@ -146,7 +204,7 @@ for epoch in range(EPOCHS):
     mp.semilogy(np.array(loss))
     mp.xlabel('batch')
     mp.ylabel('loss')
-    mp.legend(['D(w) loss', 'D(G(w)) loss'])
+    mp.legend(['D(w) loss', 'D(G(w)) loss', 'E loss'])
     mp.savefig('02-results/loss.png')
     mp.close()
     np.save('02-results/loss.npy', np.array(loss))

@@ -29,12 +29,20 @@ class SpectralNormalization(layers.Wrapper):
 
             self.w = self.layer.kernel
             self.w_shape = self.w.shape.as_list()
-            self.u = self.add_variable(
+
+            self.u = self.add_weight(
                 shape=tuple([1, self.w_shape[-1]]),
                 initializer=initializers.TruncatedNormal(stddev=0.02),
                 name='sn_u',
                 trainable=False,
                 dtype=dtypes.float32)
+
+            #self.u = self.add_variable(
+            #    shape=tuple([1, self.w_shape[-1]]),
+            #    initializer=initializers.TruncatedNormal(stddev=0.02),
+            #    name='sn_u',
+            #    trainable=False,
+            #    dtype=dtypes.float32)
 
         super(SpectralNormalization, self).build()
 

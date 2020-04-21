@@ -2,7 +2,7 @@
 Generator to read in scraped profiles and return batches.
 Returns:
  - X:   Curve data (BATCH_SIZE, POINTS, 2, 1) in cartesian coordinates
- - y:   Parameters (3, 1)
+ - y:   Parameters (3, 1) (normalized to mean and stddev (cd was scaled by log to get normal distribution))
 """
 
 ################################################################################
@@ -63,9 +63,20 @@ def profile_generator(BATCH_SIZE=512, POINTS=64):
             X[:BATCH_SIZE,: ,1, 0] = (X[:BATCH_SIZE,:, 1, 0])*2.0
 
             ##### NORMALIZE PARAMETERS (BASED ON DATASOURCE!)
-            y[:BATCH_SIZE, 0] = y[:BATCH_SIZE, 0]/2.3
-            y[:BATCH_SIZE, 1] = y[:BATCH_SIZE, 1]/0.28*2.0 - 1.0
-            y[:BATCH_SIZE, 2] = y[:BATCH_SIZE, 2]/0.20*2.0 - 1.0
+            ##### CL
+            ymean = 0.50
+            ystd =  0.7
+            y[:BATCH_SIZE, 0] = (y[:BATCH_SIZE, 0]-ymean)/ystd
+
+            ##### CD
+            ymean = -3.6
+            ystd = 0.7
+            y[:BATCH_SIZE, 1] = (np.log(y[:BATCH_SIZE, 1])-ymean)/ystd
+
+            ##### AREA
+            ymean = 0.085
+            ystd = 0.025
+            y[:BATCH_SIZE, 2] = (y[:BATCH_SIZE, 2]-ymean)/ystd
 
             ##### YIELD SET
             yield X[:BATCH_SIZE], y[:BATCH_SIZE]

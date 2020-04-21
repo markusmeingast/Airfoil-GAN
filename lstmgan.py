@@ -22,17 +22,14 @@ Observations:
  - BN on D only produces weird results
  - SN on all Conv2D layers seems to work fine, no parameter dependency as before
  - Reduced learning rate seems to stabilize slightly, but issue still not avoided
- - Scaling all parameters to normal distribution helped a lot!
- - With CD as parameter, solutions still noisy. (might have messed this up... rerun)
- - mode collapse... adding encoder
 
- - trying GAN structure as outlined in https://arxiv.org/pdf/1906.00541.pdf
+
 
 Guidelines:
  - smoothing works
  - no BN on D
  - BN on G
- - SN on all Conv2D layers
+ - SN on all Conv2D layers (not restartable...)
 """
 
 ################################################################################
@@ -45,7 +42,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, concatenate, Activation, Conv2DTranspose
 from tensorflow.keras.layers import Reshape, Dense, BatchNormalization, Conv2D
 from tensorflow.keras.layers import GaussianNoise, Dropout, LeakyReLU, Flatten, ReLU
-from tensorflow.keras.layers import Lambda, ELU
+from tensorflow.keras.layers import Lambda, LSTM, Bidirectional
 from SNConv2D import SpectralNormalization
 from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.optimizers import Adam, RMSprop, SGD
@@ -57,14 +54,14 @@ import tensorflow.keras.backend as K
 # %% DEFINE INFOGAN CLASS
 ################################################################################
 
-class CGAN():
+class LSTMGAN():
 
     """
     Implementation of the CGAN network with curve smoothing in the generator
     """
 
     ##### CLASS INIT
-    def __init__(self, DAT_SHP=(64, 2, 1), PAR_DIM=2, LAT_DIM=100, DEPTH=32, LEARN_RATE=0.0002):
+    def __init__(self, DAT_SHP=(64, 2, 1), PAR_DIM=3, LAT_DIM=100, DEPTH=32, LEARN_RATE=0.0002):
 
         """
         Initializing basic settings
@@ -80,8 +77,8 @@ class CGAN():
         self.optimizer = Adam(lr=self.LEARN_RATE, beta_1=0.5)
         #self.optimizer = RMSprop(lr=self.LEARN_RATE, clipnorm=1.)
         #self.optimizer = SGD(learning_rate=self.LEARN_RATE, momentum=0.1)
-        self.BLUR = False
-        self.CLOSE = False
+        self.BLUR = True
+        self.CLOSE = True
 
     ##### GAUSSIAN BLUR FILTER (ISSUES AT END POINTS)
     def kernel_init(self, shape, dtype=float, partition_info=None):
@@ -139,37 +136,18 @@ class CGAN():
 
         ##### COMBINE AND DENSE
         net = concatenate([y_in, z_in], axis=-1)
-        net = Dense(8*2*self.DEPTH*4)(net)
-        net = LeakyReLU(alpha=0.2)(net)
-        net = Reshape((8, 2, self.DEPTH*4))(net)
+        net = Reshape((self.DAT_SHP[0], 1))(net)
 
-        ##### CONV2DTRANSPOSE
-        net = SpectralNormalization(Conv2DTranspose(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
+        net = Bidirectional(LSTM(16, return_sequences=True))(net)
+        net = Bidirectional(LSTM(8, return_sequences=True))(net)
+        net = Bidirectional(LSTM(4, return_sequences=True))(net)
+        net = Bidirectional(LSTM(2, return_sequences=True))(net)
+        net = Bidirectional(LSTM(1, return_sequences=True))(net)
 
-        ##### CONV2DTRANSPOSE
-        net = SpectralNormalization(Conv2DTranspose(self.DEPTH, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
-
-        ##### PREDICT COORDINATES
-        net = Conv2DTranspose(1, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init, activation='tanh')(net)
-
-        ##### CLOSE TE?
-        if self.CLOSE:
-            net = Lambda(self.closing)(net)
-
-        ##### GAUSSIAN BLUR?
-        if self.BLUR:
-            net = Lambda(self.edge_padding)(net)
-            net = Conv2D(1, (7,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init, trainable=False, use_bias=False)(net)
-
-        ##### OUTPUT
-        X_out = net
+        X_out = Reshape(self.DAT_SHP)(net)
 
         ##### BUILD MODEL
         model = Model(inputs=[y_in, z_in], outputs=X_out)
-
-        ##### RETURN MODEL
         return model
 
     def build_discriminator(self):
@@ -184,83 +162,28 @@ class CGAN():
         y_in = Input(self.PAR_DIM)
 
         ##### ADD NOISE TO IMAGE
-        Xnet = GaussianNoise(0.00)(X_in)
+        Xnet = GaussianNoise(0.05)(X_in)
 
-        ynet = Dense(np.prod(self.DAT_SHP))(y_in)
-        ynet = Reshape(self.DAT_SHP)(ynet)
-        net = concatenate([Xnet, ynet], axis=-1)
+        ynet = Dense(self.DAT_SHP[0])(y_in)
+        ynet = Reshape((self.DAT_SHP[0], 1, 1))(ynet)
+        net = concatenate([Xnet, ynet], axis=2)
+        net = Reshape((self.DAT_SHP[0], 3))(net)
 
-        ##### CONV2D
-        net = SpectralNormalization(Conv2D(self.DEPTH, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
+        net = Bidirectional(LSTM(2, return_sequences=True))(net)
+        net = Bidirectional(LSTM(4, return_sequences=True))(net)
+        net = Bidirectional(LSTM(8, return_sequences=True))(net)
+        net = Bidirectional(LSTM(16, return_sequences=True))(net)
 
-        ##### CONV2D
-        net = SpectralNormalization(Conv2D(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
-
-        ##### CONV2D
-        net = SpectralNormalization(Conv2D(self.DEPTH*4, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
-
-        ##### TO DENSE
         net = Flatten()(net)
-
-        ##### DENSE LAYER ($$ NO ACTIVATION!)
-        net = Dense(64)(net)
-        net = LeakyReLU(alpha=0.2)(net)
+        #net = Dense(64)(net)
 
         ##### VALIDITY
         w_out = Dense(1, activation='sigmoid')(net)
 
-        ##### BUILD AND COMPILE MODEL
+        ##### MODEL
         model = Model(inputs=[X_in, y_in], outputs=w_out)
-        model.compile(loss=BinaryCrossentropy(label_smoothing=0.3), metrics=['accuracy'], optimizer=Adam(lr=self.LEARN_RATE, beta_1=0.5))
+        model.compile(loss=[BinaryCrossentropy(label_smoothing=0.5)], metrics=['accuracy'], optimizer=Adam(lr=self.LEARN_RATE, beta_1=0.5))
 
-        ##### RETURN MODEL
-        return model
-
-    def build_encoder(self):
-
-        """
-        Input dimensions: (DAT_SHP)
-        Output dimensions: (1) + (PAR_DIM)
-        """
-
-        ##### INPUT LAYERS
-        X_in = Input(self.DAT_SHP)
-
-        ##### ADD NOISE TO IMAGE
-        net = GaussianNoise(0.00)(X_in)
-
-        ##### CONV2D
-        net = SpectralNormalization(Conv2D(self.DEPTH, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
-
-        ##### CONV2D
-        net = SpectralNormalization(Conv2D(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
-
-        ##### CONV2D
-        net = SpectralNormalization(Conv2D(self.DEPTH*4, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
-        net = LeakyReLU(alpha=0.2)(net)
-
-        ##### TO DENSE
-        net = Flatten()(net)
-
-        ##### DENSE LAYER ($$ NO ACTIVATION!)
-        net = Dense(64)(net)
-        net = LeakyReLU(alpha=0.2)(net)
-
-        ##### PARMETERS
-        y_out = Dense(self.PAR_DIM, activation='linear')(net)
-
-        ##### NOISE
-        z_out = Dense(self.LAT_DIM, activation='linear')(net)
-
-        ##### BUILD AND COMPILE MODEL
-        model = Model(inputs=[X_in], outputs=[y_out, z_out])
-
-        ##### RETURN MODEL
         return model
 
     def build_gan(self, g_model, d_model):
@@ -283,31 +206,8 @@ class CGAN():
         ##### TEST IMAGE
         w_out = d_model([X, y_in])
 
-        ##### BUILD AND COMPILE MODEL
+        ##### BUILD, COMPILE AND RETURN MODEL
         gan_model = Model(inputs = [y_in, z_in], outputs = [w_out])
         gan_model.compile(loss=['binary_crossentropy'], metrics=['accuracy'], optimizer=Adam(lr=self.LEARN_RATE, beta_1=0.5))
 
-        ##### RETURN MODEL
         return gan_model
-
-    def build_autoencoder(self, e_model, g_model):
-        """
-        Input:
-            * image of IMG_SHP
-        Output:
-            * image of IMG_SHP
-        """
-
-        ##### INPUT IMAGE
-        X_in = Input(self.DAT_SHP)
-
-        ##### INTERMEDIATE OUTPUT (ONE-HOT-VECTOR AND LATENT NOISE)
-        y, z = e_model(X_in)
-
-        ##### GENERATOR OUTPUT
-        X_out = g_model([y, z])
-
-        ##### BUILD, COMPILE AND RETURN MODEL
-        model = Model(inputs = X_in, outputs = X_out)
-        model.compile(loss='mean_absolute_error', optimizer=Adam(lr=self.LEARN_RATE, beta_1=0.5))
-        return model
