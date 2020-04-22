@@ -24,15 +24,18 @@ Observations:
  - Reduced learning rate seems to stabilize slightly, but issue still not avoided
  - Scaling all parameters to normal distribution helped a lot!
  - With CD as parameter, solutions still noisy. (might have messed this up... rerun)
- - mode collapse... adding encoder
-
- - trying GAN structure as outlined in https://arxiv.org/pdf/1906.00541.pdf
+ - mode collapse... adding encoder (works ok it seems?)
 
 Guidelines:
  - smoothing works
- - no BN on D
- - BN on G
+ - closing works, but not really required...
+ - no BN on D or G or E
  - SN on all Conv2D layers
+ - LeakyReLU on all Conv2D and Dense layers
+
+Aifoil data:
+ - use half cosine spacing for better LE resolution (TODO)
+ - apply SG filter as Lambda layer to generator, instead of Gaussian Blur?
 """
 
 ################################################################################
@@ -52,6 +55,8 @@ from tensorflow.keras.optimizers import Adam, RMSprop, SGD
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.losses import BinaryCrossentropy
 import tensorflow.keras.backend as K
+
+from scipy.signal import savgol_filter
 
 ################################################################################
 # %% DEFINE INFOGAN CLASS
@@ -78,21 +83,22 @@ class CGAN():
         self.init = RandomNormal(mean=0.0, stddev=0.02)
         self.LEARN_RATE = LEARN_RATE
         self.optimizer = Adam(lr=self.LEARN_RATE, beta_1=0.5)
-        #self.optimizer = RMSprop(lr=self.LEARN_RATE, clipnorm=1.)
-        #self.optimizer = SGD(learning_rate=self.LEARN_RATE, momentum=0.1)
-        self.BLUR = False
-        self.CLOSE = False
+        self.BLUR = "SG" # Gaussian / SG / False
+        self.CLOSE = True
 
     ##### GAUSSIAN BLUR FILTER (ISSUES AT END POINTS)
     def kernel_init(self, shape, dtype=float, partition_info=None):
-
         """
         Definition of a length 7 gaussian blur kernel to be used to smooth the profile
         """
-
-        kernel = np.zeros(shape=shape)
-        kernel[:,:,0,0] = np.array([[0.006],[0.061],[0.242],[0.383],[0.242],[0.061],[0.006]])
-        return kernel
+        if self.BLUR == "Gaussian":
+            kernel = np.zeros(shape=shape)
+            kernel[:,:,0,0] = np.array([[0.006],[0.061],[0.242],[0.383],[0.242],[0.061],[0.006]])
+            return kernel
+        elif self.BLUR == "SG":
+            kernel = np.zeros(shape=shape)
+            kernel[:,:,0,0] = np.array([[-3],[12],[17],[12],[-3]])/35
+            return kernel
 
     ##### PAD EDGES TO MAKE GAUSSIAB BLUR WORK
     def edge_padding(self, X):
@@ -102,20 +108,40 @@ class CGAN():
         respectively to produce cleaner edge conditions
         """
 
-        ##### PAD START
-        Xlow0 = X[:, 0, :, :]
-        Xlow1 = (2.0*Xlow0 - X[:, 1, :, :])[:, np.newaxis, :, :]
-        Xlow2 = (2.0*Xlow0 - X[:, 2, :, :])[:, np.newaxis, :, :]
-        Xlow3 = (2.0*Xlow0 - X[:, 3, :, :])[:, np.newaxis, :, :]
+        if self.BLUR == 'SG':
+            """
+            SG-Filter padding with end points
+            """
+            Xlow = X[:, 0, :, :][:, np.newaxis, :, :]
+            Xhigh = X[:, -1, :, :][:, np.newaxis, :, :]
+            X = K.concatenate((Xlow, Xlow, X, Xhigh, Xhigh), axis=1)
+            return X
 
-        ##### PAD END
-        Xhigh0 = X[:, -1, :, :]
-        Xhigh1 = (2.0*Xhigh0 - X[:, -2, :, :])[:, np.newaxis, :, :]
-        Xhigh2 = (2.0*Xhigh0 - X[:, -3, :, :])[:, np.newaxis, :, :]
-        Xhigh3 = (2.0*Xhigh0 - X[:, -4, :, :])[:, np.newaxis, :, :]
+        elif self.BLUR == 'Gaussian':
+            """
+            Gaussian blur padding with mirrored conditions to keep end points
+            """
+            ##### PAD START
+            Xlow0 = X[:, 0, :, :]
+            Xlow1 = (2.0*Xlow0 - X[:, 1, :, :])[:, np.newaxis, :, :]
+            Xlow2 = (2.0*Xlow0 - X[:, 2, :, :])[:, np.newaxis, :, :]
+            Xlow3 = (2.0*Xlow0 - X[:, 3, :, :])[:, np.newaxis, :, :]
 
-        ##### BUILD AND RETURN PADDED ARRAY
-        X = K.concatenate((Xlow3,Xlow2,Xlow1,X,Xhigh1,Xhigh2,Xhigh3), axis=1)
+            ##### PAD END
+            Xhigh0 = X[:, -1, :, :]
+            Xhigh1 = (2.0*Xhigh0 - X[:, -2, :, :])[:, np.newaxis, :, :]
+            Xhigh2 = (2.0*Xhigh0 - X[:, -3, :, :])[:, np.newaxis, :, :]
+            Xhigh3 = (2.0*Xhigh0 - X[:, -4, :, :])[:, np.newaxis, :, :]
+
+            ##### BUILD AND RETURN PADDED ARRAY
+            X = K.concatenate((Xlow3,Xlow2,Xlow1,X,Xhigh1,Xhigh2,Xhigh3), axis=1)
+            return X
+
+    def sg_filter(self, X):
+        """
+        Put code to apply savgol filter here
+        """
+        #savgol_filter(K.eval(X), 3, 1, mode='nearest', axis=1)
         return X
 
     def closing(self, X):
@@ -159,9 +185,12 @@ class CGAN():
             net = Lambda(self.closing)(net)
 
         ##### GAUSSIAN BLUR?
-        if self.BLUR:
+        if self.BLUR == "Gaussian":
             net = Lambda(self.edge_padding)(net)
             net = Conv2D(1, (7,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init, trainable=False, use_bias=False)(net)
+        elif self.BLUR == "SG":
+            net = Lambda(self.edge_padding)(net)
+            net = Conv2D(1, (5,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init, trainable=False, use_bias=False)(net)
 
         ##### OUTPUT
         X_out = net

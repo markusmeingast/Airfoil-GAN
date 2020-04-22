@@ -25,7 +25,7 @@ from SNConv2D import SpectralNormalization
 # %% CONSTANTS
 ################################################################################
 
-EPOCHS = 2000
+EPOCHS = 1000
 
 RESTART = False
 LAST_EPOCH = 0
@@ -38,7 +38,6 @@ LAT_DIM = 100
 PAR_DIM = 3
 DEPTH = 32
 LEARN_RATE = 0.0002
-
 
 ################################################################################
 # %% KERAS/TF SETTINGS
@@ -121,16 +120,16 @@ for epoch in range(LAST_EPOCH, LAST_EPOCH+EPOCHS):
         w_fake = np.zeros((len(y_real),1), dtype=float)
         y_fake = np.random.randn(BATCH_SIZE, PAR_DIM)
         z_fake = np.random.randn(BATCH_SIZE, LAT_DIM)
-        X_fake = g_model.predict([y_fake, z_fake])
+        X_fake = g_model.predict([y_fake, z_fake], batch_size=len(z_fake))
 
         ##### TRAIN DISCRIMINATOR
         d_loss_real = d_model.train_on_batch(
-            [X_real[:BATCH_SIZE//2], y_real[:BATCH_SIZE//2]],
-            [w_real[:BATCH_SIZE//2]]
+            [X_real[:BATCH_SIZE], y_real[:BATCH_SIZE]],
+            [w_real[:BATCH_SIZE]]
         )
         d_loss_fake = d_model.train_on_batch(
-            [X_fake[:BATCH_SIZE//2], y_fake[:BATCH_SIZE//2]],
-            [w_fake[:BATCH_SIZE//2]]
+            [X_fake[:BATCH_SIZE], y_fake[:BATCH_SIZE]],
+            [w_fake[:BATCH_SIZE]]
         )
         d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
@@ -155,13 +154,12 @@ for epoch in range(LAST_EPOCH, LAST_EPOCH+EPOCHS):
 
     nsamples = 5
     idx = np.random.randint(low=0, high=BATCH_SIZE, size=nsamples)
-    img0 = X_real[idx, :, :, :]
-    y_pred, z_pred = e_model.predict(X_real)
-    X_pred = g_model.predict([y_pred, z_pred])
-    img1 = X_pred[idx, :, :, :]
-    for i, j in enumerate(idx):
-        mp.plot(X_real[j, :, 0, 0]+i*2.1, X_real[j, :, 1, 0]+0.5)
-        mp.plot(X_pred[j, :, 0, 0]+i*2.1, X_pred[j, :, 1, 0]-0.5)
+    X_test = X_real[idx].copy()
+    y_pred, z_pred = e_model.predict(X_test, batch_size=len(X_test))
+    X_pred = g_model.predict([y_pred, z_pred], batch_size=len(X_test))
+    for i in range(nsamples):
+        mp.plot(X_test[i, :, 0, 0]+i*2.1, X_test[i, :, 1, 0]+0.5)
+        mp.plot(X_pred[i, :, 0, 0]+i*2.1, X_pred[i, :, 1, 0]-0.5)
     mp.axis('equal')
     mp.savefig(f'02-results/ae_{epoch:03d}.png')
     mp.close()

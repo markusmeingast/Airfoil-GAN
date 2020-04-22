@@ -1,0 +1,20 @@
+LOAD profile.dat
+AI GEN AIRFOIL
+PPAR
+P
+0.5
+
+
+OPERi
+HARD
+VISC
+200000
+ITER 300
+ALFA 0
+HARD
+
+QUIT
+
+
+
+
