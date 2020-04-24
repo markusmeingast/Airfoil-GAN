@@ -25,6 +25,7 @@ Observations:
  - Scaling all parameters to normal distribution helped a lot!
  - With CD as parameter, solutions still noisy. (might have messed this up... rerun)
  - mode collapse... adding encoder (works ok it seems?)
+ - AE loss drops quite fast, so decreased learning rate for AE
 
 Guidelines:
  - smoothing works
@@ -56,8 +57,6 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.losses import BinaryCrossentropy
 import tensorflow.keras.backend as K
 
-from scipy.signal import savgol_filter
-
 ################################################################################
 # %% DEFINE INFOGAN CLASS
 ################################################################################
@@ -83,7 +82,7 @@ class CGAN():
         self.init = RandomNormal(mean=0.0, stddev=0.02)
         self.LEARN_RATE = LEARN_RATE
         self.optimizer = Adam(lr=self.LEARN_RATE, beta_1=0.5)
-        self.BLUR = "SG" # Gaussian / SG / False
+        self.BLUR = False # Gaussian / SG / False
         self.CLOSE = True
 
     ##### GAUSSIAN BLUR FILTER (ISSUES AT END POINTS)
@@ -97,7 +96,8 @@ class CGAN():
             return kernel
         elif self.BLUR == "SG":
             kernel = np.zeros(shape=shape)
-            kernel[:,:,0,0] = np.array([[-3],[12],[17],[12],[-3]])/35
+            #kernel[:,:,0,0] = np.array([[-3],[12],[17],[12],[-3]])/35 # WINDOW 5
+            kernel[:,:,0,0] = np.array([[-2],[3],[6],[7],[6],[3],[-2]])/21 # WINDOW 7
             return kernel
 
     ##### PAD EDGES TO MAKE GAUSSIAB BLUR WORK
@@ -114,7 +114,8 @@ class CGAN():
             """
             Xlow = X[:, 0, :, :][:, np.newaxis, :, :]
             Xhigh = X[:, -1, :, :][:, np.newaxis, :, :]
-            X = K.concatenate((Xlow, Xlow, X, Xhigh, Xhigh), axis=1)
+            #X = K.concatenate((Xlow, Xlow, X, Xhigh, Xhigh), axis=1)
+            X = K.concatenate((Xlow, Xlow, Xlow, X, Xhigh, Xhigh, Xhigh), axis=1)
             return X
 
         elif self.BLUR == 'Gaussian':
@@ -137,13 +138,6 @@ class CGAN():
             X = K.concatenate((Xlow3,Xlow2,Xlow1,X,Xhigh1,Xhigh2,Xhigh3), axis=1)
             return X
 
-    def sg_filter(self, X):
-        """
-        Put code to apply savgol filter here
-        """
-        #savgol_filter(K.eval(X), 3, 1, mode='nearest', axis=1)
-        return X
-
     def closing(self, X):
 
         Xlow = X[:, 0, :, :][:, np.newaxis, :, :]
@@ -165,9 +159,9 @@ class CGAN():
 
         ##### COMBINE AND DENSE
         net = concatenate([y_in, z_in], axis=-1)
-        net = Dense(8*2*self.DEPTH*4)(net)
+        net = Dense(self.DAT_SHP[0]/8*2*self.DEPTH*4)(net)
         net = LeakyReLU(alpha=0.2)(net)
-        net = Reshape((8, 2, self.DEPTH*4))(net)
+        net = Reshape((self.DAT_SHP[0]//8, 2, self.DEPTH*4))(net)
 
         ##### CONV2DTRANSPOSE
         net = SpectralNormalization(Conv2DTranspose(self.DEPTH*2, (4,2), strides=(2,1), padding='same', kernel_initializer=self.init))(net)
@@ -190,7 +184,7 @@ class CGAN():
             net = Conv2D(1, (7,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init, trainable=False, use_bias=False)(net)
         elif self.BLUR == "SG":
             net = Lambda(self.edge_padding)(net)
-            net = Conv2D(1, (5,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init, trainable=False, use_bias=False)(net)
+            net = Conv2D(1, (7,1), strides=(1,1), padding='valid', kernel_initializer=self.kernel_init, trainable=False, use_bias=False)(net)
 
         ##### OUTPUT
         X_out = net
@@ -338,5 +332,5 @@ class CGAN():
 
         ##### BUILD, COMPILE AND RETURN MODEL
         model = Model(inputs = X_in, outputs = X_out)
-        model.compile(loss='mean_absolute_error', optimizer=Adam(lr=self.LEARN_RATE, beta_1=0.5))
+        model.compile(loss='mean_absolute_error', optimizer=Adam(lr=self.LEARN_RATE/4, beta_1=0.5))
         return model

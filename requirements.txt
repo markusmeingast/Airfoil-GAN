@@ -1,0 +1,8 @@
+ray==0.8.4
+requests==2.23.0
+numpy==1.18.2
+more-itertools==8.2.0
+matplotlib==3.2.1
+tensorflow==2.1.0
+scipy==1.4.1
+beautifulsoup4==4.9.0

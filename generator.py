@@ -64,7 +64,7 @@ def profile_generator(BATCH_SIZE=512, POINTS=64):
 
             ##### NORMALIZE PARAMETERS (BASED ON DATASOURCE!)
             ##### CL
-            ymean = 0.50
+            ymean = 0.5
             ystd =  0.7
             y[:BATCH_SIZE, 0] = (y[:BATCH_SIZE, 0]-ymean)/ystd
 

@@ -12,9 +12,7 @@ VISC
 ITER 300
 ALFA 0
 HARD
+CPV
+HARD
 
 QUIT
-
-
-
-

@@ -1,28 +1,53 @@
 """
-Script to scrape airfoil profiles and properties for Re=200,000 and Ncrit=9.
+Script to scrape airfoil profiles from http://airfoiltools.com/ with properties
+for Re=200,000 and Ncrit=9.
 Assumptions:
- - profile definition start at TE/SS and end at TE/PS and are continuous
+ - profile definition start at TE/SS and end at TE/PS and are continuous (Selig)
+ - Consistent runs of profile simulations through XFoil
+
+Run:
+ > python3 airfoil_scrape.py --points
 """
 
 ################################################################################
 # %% IMPORT PACKAGES
 ################################################################################
 
+import os
+import argparse
 import requests
 from bs4 import BeautifulSoup
 import re
 import numpy as np
-import matplotlib.pyplot as mp
 import ray
 import more_itertools as mit
+
+################################################################################
+# %% COMMAND LINE ARGUMENT PARSING
+################################################################################
+
+parser = argparse.ArgumentParser()
+parser.add_argument("POINTS", help="number of points around circumference")
+parser.add_argument("CPUS", help="number of CPUs to use for ray")
+parser.add_argument("--cosine", help="use cosine spacing to refine LE", action="store_true")
+args = parser.parse_args()
 
 ################################################################################
 # %% CONSTANTS
 ################################################################################
 
 BASE_URL = "http://airfoiltools.com"
-POINTS = 64
-CPUS = 20
+POINTS = int(args.POINTS)
+CPUS = int(args.CPUS)
+
+################################################################################
+# %% CREATE FOLDER IF NOT YET EXISTING
+################################################################################
+
+try:
+    os.stat(f'01-prep-data/{POINTS}')
+except:
+    os.mkdir(f'01-prep-data/{POINTS}')
 
 ################################################################################
 # %% INIT
@@ -79,13 +104,17 @@ def scrape(links, BASE_URL):
         fp2 = raw_profile[:, 1]
 
         # SCALE TO LOCAL DISTANCE
-        #xp = np.linspace(0, 1, len(raw_profile))
         delta = np.sqrt(np.diff(fp1)**2 + np.diff(fp2)**2)
         xp = delta.cumsum()
         xp = np.insert(xp, 0, 0)/xp[-1]
 
         # TARGET DISTRIBUTION
-        x = np.linspace(0, 1, POINTS)
+        if not args.cosine:
+            ##### LINEAR
+            x = np.linspace(0, 1, POINTS)
+        elif args.cosine:
+            ##### COSINE
+            x = np.linspace(0,1, POINTS) + 0.1*np.sin(np.linspace(0, 2*np.pi, POINTS))
 
         # INTERPOLATE
         base_profile = np.array([np.interp(x, xp, fp1), np.interp(x, xp, fp2)]).T
@@ -176,5 +205,5 @@ for i, batch in enumerate(out):
     y_batch = y_batch[idx]
 
     ##### SAVE
-    np.save(f'01-prep-data/X_{i:03d}.npy', X_batch)
-    np.save(f'01-prep-data/y_{i:03d}.npy', y_batch)
+    np.save(f'01-prep-data/{POINTS}/X_{i:03d}.npy', X_batch)
+    np.save(f'01-prep-data/{POINTS}/y_{i:03d}.npy', y_batch)
