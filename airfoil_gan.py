@@ -25,7 +25,7 @@ from SNConv2D import SpectralNormalization
 # %% CONSTANTS
 ################################################################################
 
-EPOCHS = 1000
+EPOCHS = 4000
 
 RESTART = False
 LAST_EPOCH = 0
