@@ -161,7 +161,7 @@ for epoch in range(LAST_EPOCH, LAST_EPOCH+EPOCHS):
         mp.plot(X_test[i, :, 0, 0]+i*2.1, X_test[i, :, 1, 0]+0.5)
         mp.plot(X_pred[i, :, 0, 0]+i*2.1, X_pred[i, :, 1, 0]-0.5)
     mp.axis('equal')
-    mp.savefig(f'02-results/ae_{epoch:03d}.png')
+    mp.savefig(f'02-results/ae_{epoch:04d}.png')
     mp.close()
 
     ############################################################################
@@ -183,7 +183,7 @@ for epoch in range(LAST_EPOCH, LAST_EPOCH+EPOCHS):
         mp.plot(X_real[i,:,0,0]+i*2.1,X_real[i,:,1,0]+0.5)
     mp.axis('equal')
     mp.title(f'CL: {cl[0]*0.7+0.5}, CD: {np.exp(cd[0]*0.7-3.6)}')
-    mp.savefig(f'02-results/gen_{epoch:03d}.png')
+    mp.savefig(f'02-results/gen_{epoch:04d}.png')
     mp.close()
 
     ############################################################################

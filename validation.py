@@ -15,6 +15,7 @@ from SNConv2D import SpectralNormalization
 from cgan import CGAN
 from scipy.signal import savgol_filter
 import os
+import subprocess
 import argparse
 
 ################################################################################
@@ -56,7 +57,7 @@ a_std = 0.025
 # %% RUN THROUGH GENERATOR
 ################################################################################
 
-nsamples = 5
+nsamples = 20
 cl = (CL-cl_mean)/cl_std*np.ones((nsamples))
 cd = (np.log(CD)-cd_mean)/cd_std*np.ones((nsamples))
 a = (A-a_mean)/a_std*np.ones((nsamples))
@@ -82,13 +83,40 @@ mp.title(f'CL: {cl[0]*0.7+0.5}, CD: {np.exp(cd[0]*0.7-3.6)}')
 """
 
 ################################################################################
-# %% EXPORT PROFILE FOR XFOIL
+# %% EXPORT PROFILE FOR XFOIL AND RUN
 ################################################################################
 
-data = X_smooth[0, :, :, 0].copy()
-data[:, 0] = data[:, 0]/2+0.5
-data[:, 1] = data[:, 1]/2
-np.savetxt('profile.dat', data)
+CL = []
+CD = []
 
-os.system('xfoil < script.xf')
-os.system('evince plot.ps')
+for sample in range(nsamples):
+
+    ##### GET PROFILE
+    data = X_smooth[sample, :, :, 0].copy()
+
+    ##### SCALE BACK TO XFOIL DEFAULT
+    data[:, 0] = data[:, 0]/2+0.5
+    data[:, 1] = data[:, 1]/2
+
+    ##### SAVE PROFILE
+    np.savetxt('profile.dat', data)
+    np.savetxt(f'validation/profile-{sample:02d}.dat', data)
+
+    ##### RUN SIMULATION
+    out = os.popen('xfoil < script.xf').read()
+
+    ##### CHECK FOR CL/CD AND CONVERGENCE
+    out = out.split('\n')[-10:]
+
+    ##### CHECK IF CONVERGED (< 300 ITERATIONS)
+    if not out[-5].startswith(" Type "):
+        try:
+            CD.append(float(out[-6].split('=>')[0].strip().split(' ')[-1]))
+            CL.append(float(out[-7].split(' ')[-1]))
+        except:
+            print(out[-6].split('=>')[0].strip().split(' ')[-1])
+            print(out[-7].split(' ')[-1])
+
+print(f'{len(CL)} of {nsamples} converged')
+print(f'CL => mean: {np.mean(CL)} std : {np.std(CL)}')
+print(f'CD => mean: {np.mean(CD)} std : {np.std(CD)}')
