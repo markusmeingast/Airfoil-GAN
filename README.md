@@ -1,3 +1,7 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TensorFlow](https://img.shields.io/static/v1?label=TensorFlow&message=2.1&color=orange)](https://www.tensorflow.org/)
+[![Python](https://img.shields.io/static/v1?label=Python&message=3.7.5&color=green)](https://www.python.org/downloads/release/python-375/)
+
 # Airfoil-GAN
 
 Generative Adverserial Nets (GANs) have shown a promising application for generating new data samples based on large, highly varying datasets that are indistinguishable from the original real samples. Although the application has been primarily focused on visual data, such as faces or handwritten characters, the utilization of these methods for industrial applications has been somewhat limited.
