@@ -6,7 +6,7 @@
 
 Generative Adverserial Nets (GANs) have shown a promising application for generating new data samples based on large, highly varying datasets that are indistinguishable from the original real samples. Although the application has been primarily focused on visual data, such as faces or handwritten characters, the utilization of these methods for industrial applications has been somewhat limited.
 
-Here the application of a variable auto-encoder (VAE) combined with a C-GAN is explored for the design of new 2D airfoil geometries, where the input parameters will be based on lift and drag coefficients, as well as an intended cross-sectional area.
+Here the application of an auto-encoder (AE) combined with a C-GAN is explored for the design of new 2D airfoil geometries, where the input parameters will be based on lift and drag coefficients, as well as an intended cross-sectional area.
 
 # Literature
 
@@ -17,6 +17,18 @@ Achour et al. apply a C-GAN architecture to 2D airfoils. Specifically the focus 
 [1. Chen, W., Chiu, K. and Fuge, M., 2019. Aerodynamic design optimization and shape exploration using generative adversarial networks. In AIAA Scitech 2019 Forum (p. 2351).](https://doi.org/10.2514/6.2019-2351)
 
 [2. Achour, G., Sung, W.J., Pinon-Fischer, O.J. and Mavris, D.N., 2020. Development of a Conditional Generative Adversarial Network for Airfoil Shape Optimization. In AIAA Scitech 2020 Forum (p. 2261).](https://doi.org/10.2514/6.2020-2261)
+
+# Architecture
+
+The used architecture consists of three CNN based networks:
+
+1. a discriminator network is fed with real and fake profiles, along with the respective properties vectors `y` and is asked to determine the probability of a sample being real on generated.
+1. a generator takes a latent noise vector `z` along with a parameter vector `y` and generates a new profile. The realness of the generated output is tested through the discriminator, while training is turned off for the discriminator.
+1. a auto-encoder tries to mimic real input samples by reducing the dimensionality of the sample. Both the encoder and generator are trained during this step.
+
+The generator is hence trained from two sides, the GAN and the AE. This solves two issues at once, on one hand the generator is forced to interpret the latent noise vector to capture the input information (thereby effectively suppressing mode-collapse), as well as expressing information on the modality of the latent noise vector. A component analysis of the reduced vector space of real samples can be used to further improve generated samples, as modes within the noise can be extracted.
+
+![VAE-C-GAN](imgs/schematic.png)
 
 # Data Scraping
 
@@ -30,7 +42,7 @@ The profiles were preprocessed to aid the training of the model. The following s
 1. limited to airfoils with area smaller 0.2
 1. supplying CL, CD and area as parameters
 
-Scraping was done in parallel using `ray` on 20 CPUs.
+Scraping was done in parallel using `ray` on 20 CPUs. A total of over 160,000 samples were obtained in this manner.
 
 # Data Exploration
 
