@@ -2,3 +2,5 @@
 **/__pycache__/
 02-results
 validation/
+post.py
+lstmgan.py
