@@ -30,8 +30,9 @@ EPOCHS = 4000
 RESTART = False
 LAST_EPOCH = 0
 
-BATCH_SIZE = 1024
-BATCHES = 160
+FACTOR = 2
+BATCH_SIZE = 1024*FACTOR
+BATCHES = 160//FACTOR
 POINTS = 32
 DAT_SHP = (POINTS, 2, 1)
 LAT_DIM = 100
@@ -46,10 +47,8 @@ LEARN_RATE = 0.0002
 ##### ALLOW GPU MEMORY GROWTH
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
-    tf.config.experimental.set_memory_growth(gpu, True)
-
-##### USE MIXED PRECISION WHERE POSSIBLE
-#tf.keras.mixed_precision.experimental.set_policy('mixed_float16')
+    #tf.config.experimental.set_memory_growth(gpu, True)
+    tf.config.experimental.set_virtual_device_configuration(gpu, [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=2500)])
 
 ################################################################################
 # %% START GENERATOR
