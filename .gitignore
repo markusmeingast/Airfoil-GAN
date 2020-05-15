@@ -2,4 +2,4 @@
 **/__pycache__/
 02-results
 validation/
-
+**/*.prof

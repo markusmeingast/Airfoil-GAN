@@ -10,22 +10,26 @@ Assumptions:
 # %% IMPORT PACKAGES
 ################################################################################
 
+import os
 import numpy as np
 from generator import profile_generator
 from cgan import CGAN
 #from lstmgan import LSTMGAN
 #from acgan import ACGAN
 import matplotlib.pyplot as mp
+
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.losses import BinaryCrossentropy
 from SNConv2D import SpectralNormalization
 
+from tensorflow.keras import backend as K
+
 ################################################################################
 # %% CONSTANTS
 ################################################################################
 
-EPOCHS = 4000
+EPOCHS = 10
 
 RESTART = False
 LAST_EPOCH = 0
@@ -43,6 +47,14 @@ LEARN_RATE = 0.0002
 ################################################################################
 # %% KERAS/TF SETTINGS
 ################################################################################
+
+##### INTEL MKL
+os.environ["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
+os.environ["KMP_BLOCKTIME"] = "0"
+os.environ["OMP_NUM_THREADS"] = "20"
+os.environ["KMP_SETTINGS"] = "1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+#os.environ["TF_DISALBE_MKL"] = "1"
 
 ##### ALLOW GPU MEMORY GROWTH
 gpus = tf.config.experimental.list_physical_devices('GPU')
