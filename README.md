@@ -130,3 +130,5 @@ The above outlined architecture seems to be feasible to be used for design space
 Viable new designs produced by the generator need to be located within the design space of the original dataset, e.g. high lift/low-drag airfoils with a large cross-sectional area, are limited due to physical limitations covered within the original dataset. The model mostly fails when extrapolating from this design-space.
 
 Although CNN based architectures have been studied extensively for GANs due to their nature of extracting locally significant information from images, the application to 2D curve values also works nicely. Alternative methods such as LSTM based or fully dense curve descriptions may provide qualitative improvements.
+
+Due to the closed validation methodology applied, this model could be expanded to a semi-self-supervised model, i.e. feeding validation examples back into the training set. In theory the design space can be expanded past the original dataset.
