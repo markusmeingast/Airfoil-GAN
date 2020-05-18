@@ -16,7 +16,7 @@ import numpy as np
 # %% DEFINE GENERATOR FUNCTION
 ################################################################################
 
-def profile_generator(BATCH_SIZE=512, POINTS=64):
+def profile_generator(BATCH_SIZE=512, POINTS=64, DTYPE='float32'):
 
     ##### GET PROFILE FILES
     fimg = sorted(glob.glob(f'01-prep-data/{POINTS}/X_*.npy'))
@@ -79,7 +79,7 @@ def profile_generator(BATCH_SIZE=512, POINTS=64):
             y[:BATCH_SIZE, 2] = (y[:BATCH_SIZE, 2]-ymean)/ystd
 
             ##### YIELD SET
-            yield X[:BATCH_SIZE], y[:BATCH_SIZE]
+            yield X[:BATCH_SIZE].astype(DTYPE), y[:BATCH_SIZE].astype(DTYPE)
 
             ##### REMOVE YIELDED RESULTS
             X = np.delete(X, range(BATCH_SIZE), axis=0)

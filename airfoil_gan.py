@@ -24,12 +24,15 @@ from tensorflow.keras.losses import BinaryCrossentropy
 from SNConv2D import SpectralNormalization
 
 from tensorflow.keras import backend as K
+#from tensorflow.keras import mixed_precision
+from tensorflow.keras.mixed_precision.experimental import Policy, set_policy
+
 
 ################################################################################
 # %% CONSTANTS
 ################################################################################
 
-EPOCHS = 10
+EPOCHS = 100
 
 RESTART = False
 LAST_EPOCH = 0
@@ -43,18 +46,21 @@ LAT_DIM = 100
 PAR_DIM = 3
 DEPTH = 32
 LEARN_RATE = 0.0002
+DTYPE = 'float32'
 
 ################################################################################
 # %% KERAS/TF SETTINGS
 ################################################################################
 
+##### SET PRECISION TYPE
+K.set_floatx(DTYPE)
+K.set_epsilon(1e-8)
+
 ##### INTEL MKL
 os.environ["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
 os.environ["KMP_BLOCKTIME"] = "0"
-os.environ["OMP_NUM_THREADS"] = "20"
+os.environ["OMP_NUM_THREADS"] = "10"
 os.environ["KMP_SETTINGS"] = "1"
-#os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-#os.environ["TF_DISALBE_MKL"] = "1"
 
 ##### ALLOW GPU MEMORY GROWTH
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -66,7 +72,7 @@ for gpu in gpus:
 # %% START GENERATOR
 ################################################################################
 
-gen = profile_generator(BATCH_SIZE, POINTS)
+gen = profile_generator(BATCH_SIZE, POINTS, DTYPE)
 
 ################################################################################
 # %% BUILD GAN MODEL
